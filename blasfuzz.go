@@ -5,56 +5,74 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gonum/floats"
+	"gonum.org/v1/gonum/floats"
 )
 
+var (
+	decode = binary.LittleEndian
+)
+
+type FuzzData struct {
+	Data   []byte
+	Failed bool
+}
+
 // Bools extracts a byte's worth of booleans
-func Bools(data []byte) ([8]bool, bool) {
+func (fd *FuzzData) Bools() [8]bool {
 	bools := [8]bool{}
-	if len(data) < 1 {
-		return bools, false
+	if len(fd.Data) < 1 {
+		fd.Failed = true
+		return bools
 	}
-	b := data[0]
+	b := fd.Data[0]
 	for i := range bools {
 		bools[i] = b&(1<<uint(i)) != 0
 	}
-	return bools, true
+	return bools
 }
 
 // GetInt gets an integer with the given number of bytes
-func Int(data []byte, b int) (n int, ok bool) {
-	if len(data) < b {
-		return 0, false
+func (fd *FuzzData) Int(b int) (n int) {
+	if len(fd.Data) < b {
+		fd.Failed = true
+		return 0
 	}
-	if b == 1 {
-		return int(data[0]), true
+	switch b {
+	case 1:
+		return int(fd.Data[0])
+	case 2:
+		return int(decode.Uint16(fd.Data[:2:2]))
+	default:
+		panic("not coded")
 	}
-	if b == 2 {
-		return int(binary.LittleEndian.Uint16(data[:2:2])), true
-	}
-	panic("not coded")
+	fd.Data = fd.Data[b:]
 }
 
-func F64(data []byte) (float64, bool) {
-	if len(data) < 8 {
-		return math.NaN(), false
-	}
-	uint64 := binary.LittleEndian.Uint64(data[:8:8])
-	float64 := math.Float64frombits(uint64)
-	return float64, true
-}
-
-func F64S(data []byte, l int) ([]float64, bool) {
-	var ok bool
-	x := make([]float64, l)
+func (fd *FuzzData) IntS(ln, b int) []int {
+	x := make([]int, ln)
 	for i := range x {
-		x[i], ok = F64(data)
-		if !ok {
-			return nil, false
-		}
-		data = data[8:]
+		x[i] = fd.Int(b)
 	}
-	return x, true
+	return x
+}
+
+func (fd *FuzzData) F64() float64 {
+	if len(fd.Data) < 8 {
+		fd.Failed = true
+		return math.NaN()
+	}
+	uint64 := decode.Uint64(fd.Data[:8:8])
+	fd.Data = fd.Data[8:]
+	float64 := math.Float64frombits(uint64)
+	return float64
+}
+
+func (fd *FuzzData) F64S(ln int) []float64 {
+	x := make([]float64, ln)
+	for i := range x {
+		x[i] = fd.F64()
+	}
+	return x
 }
 
 // Panics returns the error if panics

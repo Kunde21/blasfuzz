@@ -5,146 +5,70 @@ import (
 	"fmt"
 
 	"github.com/btracey/blasfuzz"
-	"github.com/gonum/blas"
-	"github.com/gonum/blas/cgo"
-	"github.com/gonum/blas/native"
-	"github.com/gonum/floats"
+
+	"gonum.org/v1/gonum/blas"
+	"gonum.org/v1/gonum/blas/gonum"
+	"gonum.org/v1/gonum/floats"
+	"gonum.org/v1/netlib/blas/netlib"
+)
+
+var (
+	cImpl  = netlib.Implementation{}
+	goImpl = gonum.Implementation{}
 )
 
 func Fuzz(data []byte) int {
-	n, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
+	bfuzz := blasfuzz.FuzzData{Data: data}
+
+	n := bfuzz.Int(1)
 
 	// Construct slice 1
-	incX, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
-	lenX, ok := blasfuzz.Int(data, 2)
-	if !ok {
-		return 0
-	}
-	data = data[2:]
-	x, ok := blasfuzz.F64S(data, lenX)
-	if !ok {
-		return 0
-	}
-	data = data[lenX*8:]
+	incX := bfuzz.Int(1)
+	lenX := bfuzz.Int(2)
+	x := bfuzz.F64S(lenX)
 
 	// Construct slice 2
-	incY, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
-	lenY, ok := blasfuzz.Int(data, 2)
-	if !ok {
-		return 0
-	}
-	data = data[2:]
-	y, ok := blasfuzz.F64S(data, lenY)
-	if !ok {
-		return 0
-	}
-	data = data[lenY*8:]
+	incY := bfuzz.Int(1)
+	lenY := bfuzz.Int(2)
+	y := bfuzz.F64S(lenY)
 
 	// Construct matrix 1
-	m1, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
-	n1, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
-	ld1, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
+	m1 := bfuzz.Int(1)
+	n1 := bfuzz.Int(1)
+	ld1 := bfuzz.Int(1)
 	lenA := ld1*m1 + n1
-	a, ok := blasfuzz.F64S(data, lenA)
-	if !ok {
-		return 0
-	}
-	data = data[lenA*8:]
+	a := bfuzz.F64S(lenA)
 
 	// Construct matrix 2
-	m2, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
-	n2, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
-	ld2, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
+	m2 := bfuzz.Int(1)
+	n2 := bfuzz.Int(1)
+	ld2 := bfuzz.Int(1)
 	lenB := ld2*m2 + n2
-	b, ok := blasfuzz.F64S(data, lenB)
-	if !ok {
-		return 0
-	}
-	data = data[lenB*8:]
+	b := bfuzz.F64S(lenB)
 
 	// Construct matrix 3
-	m3, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
-	n3, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
-	ld3, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
+	m3 := bfuzz.Int(1)
+	n3 := bfuzz.Int(1)
+	ld3 := bfuzz.Int(1)
 	lenC := ld3*m3 + n3
-	c, ok := blasfuzz.F64S(data, lenC)
-	if !ok {
-		return 0
-	}
-	data = data[lenC*8:]
+	c := bfuzz.F64S(lenC)
 
 	// Generate a couple of parameters and booleans
 	nParams := 8
-	params, ok := blasfuzz.F64S(data, nParams)
-	if !ok {
-		return 0
-	}
-	data = data[nParams*8:]
+	params := bfuzz.F64S(nParams)
 
 	// Generate a couple of booleans
-	bools, ok := blasfuzz.Bools(data)
-	if !ok {
-		return 0
-	}
-	data = data[1:]
+	bools := bfuzz.Bools()
 
 	// Generate an integer
-	iParam, ok := blasfuzz.Int(data, 1)
-	if !ok {
-		return -1
-	}
-	data = data[1:]
+	iParam := bfuzz.Int(1)
 
 	_, _, _ = a, b, c
 	_ = bools
+
+	if bfuzz.Failed {
+		return 0
+	}
 
 	// Test the functions
 	level1Test(n, x, lenX, incX, y, lenY, incY, params, iParam)
@@ -163,14 +87,14 @@ func level1Test(n int, x []float64, lenX, incX int, y []float64, lenY, incY int,
 	flag = flag%4 - 2
 
 	drotm := blas.DrotmParams{
-		blas.Flag(flag),
-		[4]float64{params[0], params[1], params[2], params[3]},
+		Flag: blas.Flag(flag),
+		H:    [4]float64{params[0], params[1], params[2], params[3]},
 	}
 
-	str1 := fmt.Sprintf("Case. N = %v, IncX = %v, x = %#v, alpha = %v", n, incX, x, alpha)
-	str2 := fmt.Sprintf("Case N = %v\n IncX: %v, x: %v\nIncY: %v, y: %v\n alpha: %v", n, incX, x, incY, y, alpha)
-	str3 := fmt.Sprintf("Case N = %v\n IncX: %v, x: %v\nIncY: %v, y: %v\n alpha: %v beta: %v", n, incX, x, incY, y, alpha, beta)
-	str4 := fmt.Sprintf("Case. N = %v, IncX = %v, x = %#v, drotm = %v", n, incX, x, drotm)
+	str1 := fmt.Sprintf("Case: N = %v, IncX = %v, x = %#v, alpha = %v", n, incX, x, alpha)
+	str2 := fmt.Sprintf("Case: N = %v\n IncX: %v, x: %v\nIncY: %v, y: %v\n alpha: %v", n, incX, x, incY, y, alpha)
+	str3 := fmt.Sprintf("Case: N = %v\n IncX: %v, x: %v\nIncY: %v, y: %v\n alpha: %v beta: %v", n, incX, x, incY, y, alpha, beta)
+	str4 := fmt.Sprintf("Case: N = %v, IncX = %v, x = %#v, drotm = %v", n, incX, x, drotm)
 
 	testDrot(str3, n, x, incX, y, incY, alpha, beta)
 	testDrotm(str4, n, x, incX, y, incY, drotm)
@@ -186,12 +110,12 @@ func level1Test(n int, x []float64, lenX, incX int, y []float64, lenY, incY int,
 
 func testIdamax(str string, n int, x []float64, incX int) {
 	var natAns int
-	nat := func() { natAns = native.Implementation{}.Idamax(n, x, incX) }
+	nat := func() { natAns = goImpl.Idamax(n, x, incX) }
 	errNative := blasfuzz.CatchPanic(nat)
 
 	cx := blasfuzz.CloneF64S(x)
 	var cAns int
-	c := func() { cAns = cgo.Implementation{}.Idamax(n, cx, incX) }
+	c := func() { cAns = cImpl.Idamax(n, cx, incX) }
 	errC := blasfuzz.CatchPanic(c)
 
 	blasfuzz.SamePanic(str, errC, errNative)
@@ -204,12 +128,12 @@ func testIdamax(str string, n int, x []float64, incX int) {
 
 func testDnrm2(str string, n int, x []float64, incX int) {
 	var natAns float64
-	nat := func() { natAns = native.Implementation{}.Dnrm2(n, x, incX) }
+	nat := func() { natAns = goImpl.Dnrm2(n, x, incX) }
 	errNative := blasfuzz.CatchPanic(nat)
 
 	cx := blasfuzz.CloneF64S(x)
 	var cAns float64
-	c := func() { cAns = cgo.Implementation{}.Dnrm2(n, cx, incX) }
+	c := func() { cAns = cImpl.Dnrm2(n, cx, incX) }
 	errC := blasfuzz.CatchPanic(c)
 
 	blasfuzz.SamePanic(str, errC, errNative)
@@ -219,12 +143,12 @@ func testDnrm2(str string, n int, x []float64, incX int) {
 
 func testDasum(str string, n int, x []float64, incX int) {
 	var natAns float64
-	nat := func() { natAns = native.Implementation{}.Dasum(n, x, incX) }
+	nat := func() { natAns = goImpl.Dasum(n, x, incX) }
 	errNative := blasfuzz.CatchPanic(nat)
 
 	cx := blasfuzz.CloneF64S(x)
 	var cAns float64
-	c := func() { cAns = cgo.Implementation{}.Dasum(n, cx, incX) }
+	c := func() { cAns = cImpl.Dasum(n, cx, incX) }
 	errC := blasfuzz.CatchPanic(c)
 
 	blasfuzz.SamePanic(str, errC, errNative)
@@ -234,11 +158,11 @@ func testDasum(str string, n int, x []float64, incX int) {
 
 func testDscal(str string, n int, x []float64, incX int, alpha float64) {
 	natX := blasfuzz.CloneF64S(x)
-	nat := func() { native.Implementation{}.Dscal(n, alpha, natX, incX) }
+	nat := func() { goImpl.Dscal(n, alpha, natX, incX) }
 	errNative := blasfuzz.CatchPanic(nat)
 
 	cx := blasfuzz.CloneF64S(x)
-	c := func() { cgo.Implementation{}.Dscal(n, alpha, cx, incX) }
+	c := func() { cImpl.Dscal(n, alpha, cx, incX) }
 	errC := blasfuzz.CatchPanic(c)
 
 	blasfuzz.SamePanic(str, errC, errNative)
@@ -251,9 +175,9 @@ func testDaxpy(str string, n int, alpha float64, x []float64, incX int, y []floa
 	cX := blasfuzz.CloneF64S(x)
 	cY := blasfuzz.CloneF64S(y)
 
-	nat := func() { native.Implementation{}.Daxpy(n, alpha, natX, incX, natY, incY) }
+	nat := func() { goImpl.Daxpy(n, alpha, natX, incX, natY, incY) }
 	errNative := blasfuzz.CatchPanic(nat)
-	c := func() { cgo.Implementation{}.Daxpy(n, alpha, cX, incX, cY, incY) }
+	c := func() { cImpl.Daxpy(n, alpha, cX, incX, cY, incY) }
 	errC := blasfuzz.CatchPanic(c)
 	/*
 		if n == 0 {
@@ -272,9 +196,9 @@ func testDcopy(str string, n int, x []float64, incX int, y []float64, incY int) 
 	cX := blasfuzz.CloneF64S(x)
 	cY := blasfuzz.CloneF64S(y)
 
-	nat := func() { native.Implementation{}.Dcopy(n, natX, incX, natY, incY) }
+	nat := func() { goImpl.Dcopy(n, natX, incX, natY, incY) }
 	errNative := blasfuzz.CatchPanic(nat)
-	c := func() { cgo.Implementation{}.Dcopy(n, cX, incX, cY, incY) }
+	c := func() { cImpl.Dcopy(n, cX, incX, cY, incY) }
 	errC := blasfuzz.CatchPanic(c)
 
 	blasfuzz.SamePanic(str, errC, errNative)
@@ -288,9 +212,9 @@ func testDswap(str string, n int, x []float64, incX int, y []float64, incY int) 
 	cX := blasfuzz.CloneF64S(x)
 	cY := blasfuzz.CloneF64S(y)
 
-	nat := func() { native.Implementation{}.Dswap(n, natX, incX, natY, incY) }
+	nat := func() { goImpl.Dswap(n, natX, incX, natY, incY) }
 	errNative := blasfuzz.CatchPanic(nat)
-	c := func() { cgo.Implementation{}.Dswap(n, cX, incX, cY, incY) }
+	c := func() { cImpl.Dswap(n, cX, incX, cY, incY) }
 	errC := blasfuzz.CatchPanic(c)
 
 	blasfuzz.SamePanic(str, errC, errNative)
@@ -305,10 +229,10 @@ func testDdot(str string, n int, x []float64, incX int, y []float64, incY int) {
 	cY := blasfuzz.CloneF64S(y)
 
 	var natAns float64
-	nat := func() { natAns = native.Implementation{}.Ddot(n, natX, incX, natY, incY) }
+	nat := func() { natAns = goImpl.Ddot(n, natX, incX, natY, incY) }
 	errNative := blasfuzz.CatchPanic(nat)
 	var cAns float64
-	c := func() { cAns = cgo.Implementation{}.Ddot(n, cX, incX, cY, incY) }
+	c := func() { cAns = cImpl.Ddot(n, cX, incX, cY, incY) }
 	errC := blasfuzz.CatchPanic(c)
 
 	blasfuzz.SamePanic(str, errC, errNative)
@@ -323,9 +247,9 @@ func testDrot(str string, n int, x []float64, incX int, y []float64, incY int, c
 	cX := blasfuzz.CloneF64S(x)
 	cY := blasfuzz.CloneF64S(y)
 
-	nat := func() { native.Implementation{}.Drot(n, natX, incX, natY, incY, c, s) }
+	nat := func() { goImpl.Drot(n, natX, incX, natY, incY, c, s) }
 	errNative := blasfuzz.CatchPanic(nat)
-	cFunc := func() { cgo.Implementation{}.Drot(n, cX, incX, cY, incY, c, s) }
+	cFunc := func() { cImpl.Drot(n, cX, incX, cY, incY, c, s) }
 	errC := blasfuzz.CatchPanic(cFunc)
 
 	blasfuzz.SamePanic(str, errC, errNative)
@@ -338,9 +262,9 @@ func testDrotm(str string, n int, x []float64, incX int, y []float64, incY int, 
 	natY := blasfuzz.CloneF64S(y)
 	cX := blasfuzz.CloneF64S(x)
 	cY := blasfuzz.CloneF64S(y)
-	nat := func() { native.Implementation{}.Drotm(n, natX, incX, natY, incY, param) }
+	nat := func() { goImpl.Drotm(n, natX, incX, natY, incY, param) }
 	errNative := blasfuzz.CatchPanic(nat)
-	cFunc := func() { cgo.Implementation{}.Drotm(n, cX, incX, cY, incY, param) }
+	cFunc := func() { cImpl.Drotm(n, cX, incX, cY, incY, param) }
 	errC := blasfuzz.CatchPanic(cFunc)
 
 	blasfuzz.SamePanic(str, errC, errNative)
